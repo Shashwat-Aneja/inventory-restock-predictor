@@ -57,7 +57,7 @@ def predict_restock(csv_file):
 
         print("--------------------------------\n")
 
-    except Exception as e:
+    except (OSError, pd.errors.ParserError, ValueError) as e:
         print(f"❌ Error: {e}")
 
 
