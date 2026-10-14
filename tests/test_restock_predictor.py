@@ -64,3 +64,14 @@ def test_predictor_rejects_missing_required_columns(tmp_path, capsys):
     predict_restock(str(csv_path))
 
     assert "must include 'day' and 'stock_left' columns" in capsys.readouterr().out
+
+def test_predictor_averages_duplicate_day_observations(tmp_path, capsys):
+    csv_path = tmp_path / "duplicate-days.csv"
+    pd.DataFrame(
+        {"day": [1, 1, 2], "stock_left": [100, 200, 150]}
+    ).to_csv(csv_path, index=False)
+
+    predict_restock(str(csv_path))
+
+    output = capsys.readouterr().out
+    assert "Predicted stock for next day: 150.00" in output
