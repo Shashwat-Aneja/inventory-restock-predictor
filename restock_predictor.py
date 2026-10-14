@@ -35,8 +35,13 @@ def predict_restock(csv_file):
             print("❌ At least two distinct day values are required for a forecast.")
             return
 
-        # Order records explicitly so the forecast always targets the latest day.
-        df = df.sort_values("day")
+        # Aggregate repeated observations for a day so duplicate rows do not
+        # give that day extra weight in the regression model.
+        df = (
+            df.groupby("day", as_index=False)["stock_left"]
+            .mean()
+            .sort_values("day")
+        )
         X = df[["day"]]
         y = df["stock_left"]
 
