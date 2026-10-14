@@ -50,8 +50,9 @@ def test_predictor_rejects_negative_stock_counts(tmp_path, capsys):
 
     predict_restock(str(csv_path))
 
-    assert "stock_left" in capsys.readouterr().out
-    assert "negative inventory counts" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "stock_left" in output
+    assert "negative inventory counts" in output
 
 
 def test_predictor_rejects_missing_required_columns(tmp_path, capsys):
