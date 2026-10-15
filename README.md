@@ -43,6 +43,9 @@ pip install pandas scikit-learn
 ### 3. Run the script
 ```bash
 python restock_predictor.py data.csv
+
+# Override the default minimum safe stock level (500 units)
+python restock_predictor.py data.csv --threshold 850
 ```
 
 ---
