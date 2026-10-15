@@ -7,7 +7,7 @@ This project demonstrates predictive analytics to support operational decision-m
 
 ## 📊 Features
 - Predicts future inventory level using Linear Regression
-- Estimates when to reorder stock
+- Flags restocking risk when the next-day forecast falls below the configured threshold
 - Identifies low-inventory risk
 - Reads data from CSV file
 
