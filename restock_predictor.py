@@ -1,5 +1,5 @@
+import argparse
 import math
-import sys
 
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -7,7 +7,11 @@ from sklearn.linear_model import LinearRegression
 RESTOCK_THRESHOLD = 500  # Minimum safe stock level
 
 
-def predict_restock(csv_file):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD):
+    if not math.isfinite(threshold) or threshold < 0:
+        print("❌ Restock threshold must be a finite, non-negative number.")
+        return
+
     try:
         df = pd.read_csv(csv_file)
 
@@ -55,7 +59,7 @@ def predict_restock(csv_file):
         print("----------------------------")
         print(f"Predicted stock for next day: {predicted_stock:.2f}")
 
-        if predicted_stock < RESTOCK_THRESHOLD:
+        if predicted_stock < threshold:
             print("⚠ Warning: Stock will fall below threshold soon. Consider restocking now.")
         else:
             print("✔ Stock levels are safe for now.")
@@ -67,11 +71,20 @@ def predict_restock(csv_file):
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python restock_predictor.py <csv_file>")
-        return
-
-    predict_restock(sys.argv[1])
+    parser = argparse.ArgumentParser(
+        description="Forecast next-day inventory and flag low-stock risk."
+    )
+    parser.add_argument("csv_file", help="Path to inventory CSV data")
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=RESTOCK_THRESHOLD,
+        help=f"Minimum safe stock level (default: {RESTOCK_THRESHOLD})",
+    )
+    args = parser.parse_args()
+    if not math.isfinite(args.threshold) or args.threshold < 0:
+        parser.error("--threshold must be a finite, non-negative number")
+    predict_restock(args.csv_file, threshold=args.threshold)
 
 
 if __name__ == "__main__":
