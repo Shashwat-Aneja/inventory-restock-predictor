@@ -75,3 +75,26 @@ def test_predictor_averages_duplicate_day_observations(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "Predicted stock for next day: 150.00" in output
+
+def test_predictor_uses_custom_restock_threshold(tmp_path, capsys):
+    csv_path = tmp_path / "inventory.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
+        csv_path, index=False
+    )
+
+    predict_restock(str(csv_path), threshold=850)
+
+    output = capsys.readouterr().out
+    assert "Predicted stock for next day: 700.00" in output
+    assert "Warning: Stock will fall below threshold" in output
+
+
+def test_predictor_rejects_negative_threshold(tmp_path, capsys):
+    csv_path = tmp_path / "inventory.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
+        csv_path, index=False
+    )
+
+    predict_restock(str(csv_path), threshold=-1)
+
+    assert "finite, non-negative number" in capsys.readouterr().out
