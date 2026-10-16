@@ -37,7 +37,7 @@ cd inventory-restock-predictor
 
 ### 2. Install dependencies
 ```bash
-pip install pandas scikit-learn
+pip install -r requirements.txt
 ```
 
 ### 3. Run the script
@@ -46,6 +46,14 @@ python restock_predictor.py data.csv
 
 # Override the default minimum safe stock level (500 units)
 python restock_predictor.py data.csv --threshold 850
+```
+
+### 4. Run the test suite
+
+Install the project dependencies above, then run:
+
+```bash
+python -m pytest -q
 ```
 
 ---
