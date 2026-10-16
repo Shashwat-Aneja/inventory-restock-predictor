@@ -62,9 +62,12 @@ python -m pytest -q
 
 ```
 inventory-restock-predictor/
-│
 ├── restock_predictor.py
-└── README.md
+├── sample_inventory.csv
+├── requirements.txt
+├── README.md
+└── tests/
+    └── test_restock_predictor.py
 ```
 
 ---
