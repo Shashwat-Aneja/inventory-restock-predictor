@@ -89,6 +89,29 @@ def test_predictor_uses_custom_restock_threshold(tmp_path, capsys):
     assert "Warning: Stock will fall below threshold" in output
 
 
+
+def test_predictor_rejects_infinite_inventory_values(tmp_path, capsys):
+    csv_path = tmp_path / "infinite.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [100, float("inf")]}).to_csv(
+        csv_path, index=False
+    )
+
+    predict_restock(str(csv_path))
+
+    assert "finite numeric values" in capsys.readouterr().out
+
+
+def test_predictor_rejects_non_finite_threshold(tmp_path, capsys):
+    csv_path = tmp_path / "inventory.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
+        csv_path, index=False
+    )
+
+    predict_restock(str(csv_path), threshold=float("nan"))
+
+    assert "finite, non-negative number" in capsys.readouterr().out
+
+
 def test_predictor_rejects_negative_threshold(tmp_path, capsys):
     csv_path = tmp_path / "inventory.csv"
     pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
