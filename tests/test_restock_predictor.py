@@ -121,3 +121,27 @@ def test_predictor_rejects_negative_threshold(tmp_path, capsys):
     predict_restock(str(csv_path), threshold=-1)
 
     assert "finite, non-negative number" in capsys.readouterr().out
+
+
+def test_predictor_supports_a_multi_day_forecast(tmp_path, capsys):
+    csv_path = tmp_path / "inventory.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
+        csv_path, index=False
+    )
+
+    predict_restock(str(csv_path), threshold=500, days_ahead=2)
+
+    output = capsys.readouterr().out
+    assert "Predicted stock for day 4 (2 days ahead): 600.00" in output
+    assert "Stock levels are safe for now" in output
+
+
+def test_predictor_rejects_non_positive_forecast_horizon(tmp_path, capsys):
+    csv_path = tmp_path / "inventory.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
+        csv_path, index=False
+    )
+
+    predict_restock(str(csv_path), days_ahead=0)
+
+    assert "Forecast horizon must be a positive whole number" in capsys.readouterr().out
