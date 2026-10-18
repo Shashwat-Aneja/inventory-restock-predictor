@@ -80,3 +80,14 @@ inventory-restock-predictor/
 ---
 
 Developed by **Shashwat Aneja**
+
+
+## Forecasting beyond the next day
+
+By default, the predictor forecasts one day after the latest day in the CSV. Use `--days-ahead` to select a later forecast horizon while keeping the same fitted linear-regression model:
+
+```bash
+python restock_predictor.py sample_inventory.csv --days-ahead 7
+```
+
+The horizon must be a positive whole number. The default of `1` preserves the existing next-day output.
