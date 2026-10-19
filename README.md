@@ -91,3 +91,8 @@ python restock_predictor.py sample_inventory.csv --days-ahead 7
 ```
 
 The horizon must be a positive whole number. The default of `1` preserves the existing next-day output.
+
+
+## Forecast bounds
+
+Linear extrapolation can mathematically produce negative values even though physical inventory cannot be negative. The predictor floors the displayed forecast at `0.00`; restock-risk evaluation uses that bounded estimate.
