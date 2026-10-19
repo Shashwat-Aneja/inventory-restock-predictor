@@ -56,7 +56,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         model.fit(X, y)
 
         target_day = float(X["day"].max()) + days_ahead
-        predicted_stock = model.predict([[target_day]])[0]
+        # Inventory cannot be negative; clamp extrapolated estimates at zero.\n        predicted_stock = max(0.0, float(model.predict([[target_day]])[0]))
 
         print("\n📦 Inventory Restock Predictor")
         print("----------------------------")
