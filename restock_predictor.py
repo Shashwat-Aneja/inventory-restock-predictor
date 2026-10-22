@@ -7,6 +7,19 @@ from sklearn.linear_model import LinearRegression
 RESTOCK_THRESHOLD = 500  # Minimum safe stock level
 
 
+def classify_stock_status(predicted_stock, threshold):
+    """Classify forecast stock as critical, restock-needed, or healthy."""
+    if not math.isfinite(predicted_stock) or predicted_stock < 0:
+        raise ValueError("Predicted stock must be a finite, non-negative number.")
+    if not math.isfinite(threshold) or threshold < 0:
+        raise ValueError("Restock threshold must be a finite, non-negative number.")
+    if predicted_stock < threshold:
+        if threshold > 0 and predicted_stock <= threshold * 0.5:
+            return "critical"
+        return "restock"
+    return "healthy"
+
+
 def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
     if not math.isfinite(threshold) or threshold < 0:
         print("❌ Restock threshold must be a finite, non-negative number.")
