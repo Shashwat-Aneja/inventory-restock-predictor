@@ -3,6 +3,22 @@ import pandas as pd
 from restock_predictor import predict_restock
 
 
+def test_stock_status_distinguishes_critical_restock_and_healthy():
+    from restock_predictor import classify_stock_status
+
+    assert classify_stock_status(20, 100) == "critical"
+    assert classify_stock_status(60, 100) == "restock"
+    assert classify_stock_status(100, 100) == "healthy"
+
+
+def test_stock_status_rejects_invalid_forecast_values():
+    import pytest
+    from restock_predictor import classify_stock_status
+
+    with pytest.raises(ValueError, match="finite, non-negative"):
+        classify_stock_status(-1, 100)
+
+
 def test_predictor_sorts_history_before_forecasting(tmp_path, capsys):
     csv_path = tmp_path / "inventory.csv"
     pd.DataFrame(
