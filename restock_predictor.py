@@ -78,7 +78,11 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         else:
             print(f"Predicted stock for day {target_day:g} ({days_ahead} days ahead): {predicted_stock:.2f}")
 
-        if predicted_stock < threshold:
+        status = classify_stock_status(predicted_stock, threshold)
+        print(f"Stock risk: {status}")
+        if status == "critical":
+            print("⚠ Critical: Forecast stock is at or below half the threshold. Prioritize restocking.")
+        elif status == "restock":
             print("⚠ Warning: Stock will fall below threshold soon. Consider restocking now.")
         else:
             print("✔ Stock levels are safe for now.")
