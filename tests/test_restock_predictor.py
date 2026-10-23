@@ -32,6 +32,15 @@ def test_predictor_sorts_history_before_forecasting(tmp_path, capsys):
     assert "Warning: Stock will fall below threshold" in output
 
 
+def test_predictor_reports_critical_stock_risk(tmp_path, capsys):
+    csv_path = tmp_path / "critical.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [100, 50]}).to_csv(csv_path, index=False)
+    predict_restock(str(csv_path), threshold=500)
+    output = capsys.readouterr().out
+    assert "Stock risk: critical" in output
+    assert "Prioritize restocking" in output
+
+
 def test_predictor_rejects_empty_history(tmp_path, capsys):
     csv_path = tmp_path / "empty.csv"
     pd.DataFrame(columns=["day", "stock_left"]).to_csv(csv_path, index=False)
