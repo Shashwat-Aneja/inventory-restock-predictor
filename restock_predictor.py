@@ -20,6 +20,28 @@ def classify_stock_status(predicted_stock, threshold):
     return "healthy"
 
 
+def estimate_days_until_threshold(current_stock, daily_change, threshold):
+    """Estimate days to the threshold from the latest stock and fitted daily trend.
+
+    Returns zero when stock is already at/below the threshold, or None when
+    the fitted trend is flat/increasing and therefore does not predict a crossing.
+    """
+    for label, value in (
+        ("Current stock", current_stock),
+        ("Daily stock change", daily_change),
+        ("Restock threshold", threshold),
+    ):
+        if not math.isfinite(value):
+            raise ValueError(f"{label} must be a finite number.")
+    if current_stock < 0 or threshold < 0:
+        raise ValueError("Stock and threshold must be non-negative.")
+    if current_stock <= threshold:
+        return 0
+    if daily_change >= 0:
+        return None
+    return int(math.ceil((current_stock - threshold) / -daily_change))
+
+
 def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
     if not math.isfinite(threshold) or threshold < 0:
         print("❌ Restock threshold must be a finite, non-negative number.")
@@ -69,7 +91,12 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         model.fit(X, y)
 
         target_day = float(X["day"].max()) + days_ahead
-        # Inventory cannot be negative; clamp extrapolated estimates at zero.\n        predicted_stock = max(0.0, float(model.predict([[target_day]])[0]))
+        # Inventory cannot be negative; clamp extrapolated estimates at zero.
+        predicted_stock = max(0.0, float(model.predict([[target_day]])[0]))
+        daily_change = float(model.coef_[0])
+        days_to_threshold = estimate_days_until_threshold(
+            float(y.iloc[-1]), daily_change, threshold
+        )
 
         print("\n📦 Inventory Restock Predictor")
         print("----------------------------")
@@ -77,6 +104,11 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             print(f"Predicted stock for next day: {predicted_stock:.2f}")
         else:
             print(f"Predicted stock for day {target_day:g} ({days_ahead} days ahead): {predicted_stock:.2f}")
+
+        if days_to_threshold is None:
+            print("Estimated days until threshold: no decline indicated by trend")
+        else:
+            print(f"Estimated days until threshold: {days_to_threshold}")
 
         status = classify_stock_status(predicted_stock, threshold)
         print(f"Stock risk: {status}")
