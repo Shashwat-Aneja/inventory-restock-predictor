@@ -184,7 +184,8 @@ def test_predictor_clamps_long_horizon_below_zero(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "Predicted stock for day 12 (10 days ahead): 0.00" in output
-    assert "Warning: Stock will fall below threshold" in output
+    assert "Stock risk: critical" in output
+    assert "Prioritize restocking" in output
 
 
 def test_predictor_rejects_boolean_forecast_horizon(tmp_path, capsys):
