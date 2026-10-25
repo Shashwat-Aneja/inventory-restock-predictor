@@ -196,3 +196,25 @@ def test_predictor_rejects_boolean_forecast_horizon(tmp_path, capsys):
     predict_restock(str(csv_path), days_ahead=True)
 
     assert "positive whole number of days" in capsys.readouterr().out
+
+
+def test_estimate_days_until_threshold_uses_declining_daily_trend():
+    from restock_predictor import estimate_days_until_threshold
+
+    assert estimate_days_until_threshold(800, -100, 500) == 3
+    assert estimate_days_until_threshold(400, -100, 500) == 0
+    assert estimate_days_until_threshold(800, 0, 500) is None
+    assert estimate_days_until_threshold(800, 25, 500) is None
+
+
+def test_predictor_reports_estimated_days_until_threshold(tmp_path, capsys):
+    csv_path = tmp_path / "inventory.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
+        csv_path, index=False
+    )
+
+    predict_restock(str(csv_path), threshold=500)
+
+    output = capsys.readouterr().out
+    assert "Estimated days until threshold: 3" in output
+    assert "Predicted stock for next day: 700.00" in output
