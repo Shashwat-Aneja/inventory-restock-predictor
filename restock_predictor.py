@@ -104,6 +104,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             print(f"Predicted stock for next day: {predicted_stock:.2f}")
         else:
             print(f"Predicted stock for day {target_day:g} ({days_ahead} days ahead): {predicted_stock:.2f}")
+        print(f"Estimated daily stock change: {daily_change:+.2f} units/day")
 
         if days_to_threshold is None:
             print("Estimated days until threshold: no decline indicated by trend")
