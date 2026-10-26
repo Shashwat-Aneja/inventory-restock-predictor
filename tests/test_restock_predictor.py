@@ -67,6 +67,7 @@ def test_predictor_requires_two_distinct_days(tmp_path, capsys):
 
     assert "two distinct day values" in capsys.readouterr().out
 
+
 def test_predictor_rejects_negative_stock_counts(tmp_path, capsys):
     csv_path = tmp_path / "negative-stock.csv"
     pd.DataFrame({"day": [1, 2], "stock_left": [100, -5]}).to_csv(
@@ -90,6 +91,7 @@ def test_predictor_rejects_missing_required_columns(tmp_path, capsys):
 
     assert "must include 'day' and 'stock_left' columns" in capsys.readouterr().out
 
+
 def test_predictor_averages_duplicate_day_observations(tmp_path, capsys):
     csv_path = tmp_path / "duplicate-days.csv"
     pd.DataFrame(
@@ -100,6 +102,7 @@ def test_predictor_averages_duplicate_day_observations(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "Predicted stock for next day: 150.00" in output
+
 
 def test_predictor_uses_custom_restock_threshold(tmp_path, capsys):
     csv_path = tmp_path / "inventory.csv"
@@ -112,7 +115,6 @@ def test_predictor_uses_custom_restock_threshold(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "Predicted stock for next day: 700.00" in output
     assert "Warning: Stock will fall below threshold" in output
-
 
 
 def test_predictor_rejects_infinite_inventory_values(tmp_path, capsys):
@@ -172,8 +174,6 @@ def test_predictor_rejects_non_positive_forecast_horizon(tmp_path, capsys):
     assert "Forecast horizon must be a positive whole number" in capsys.readouterr().out
 
 
-
-
 def test_predictor_clamps_long_horizon_below_zero(tmp_path, capsys):
     csv_path = tmp_path / "declining-inventory.csv"
     pd.DataFrame({"day": [1, 2], "stock_left": [10, 5]}).to_csv(
@@ -210,12 +210,22 @@ def test_estimate_days_until_threshold_uses_declining_daily_trend():
 
 def test_predictor_reports_estimated_days_until_threshold(tmp_path, capsys):
     csv_path = tmp_path / "inventory.csv"
-    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
-        csv_path, index=False
-    )
+    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(csv_path, index=False)
 
     predict_restock(str(csv_path), threshold=500)
 
     output = capsys.readouterr().out
     assert "Estimated days until threshold: 3" in output
     assert "Predicted stock for next day: 700.00" in output
+
+
+def test_predictor_reports_fitted_daily_stock_change(tmp_path, capsys):
+    csv_path = tmp_path / "declining.csv"
+    pd.DataFrame({"day": [1, 2, 3], "stock_left": [900, 800, 700]}).to_csv(
+        csv_path, index=False
+    )
+
+    predict_restock(str(csv_path), threshold=500)
+
+    output = capsys.readouterr().out
+    assert "Estimated daily stock change: -100.00 units/day" in output
