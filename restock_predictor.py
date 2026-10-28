@@ -39,7 +39,14 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
         return 0
     if daily_change >= 0:
         return None
-    return int(math.ceil((current_stock - threshold) / -daily_change))
+
+    raw_days = (current_stock - threshold) / -daily_change
+    nearest_integer = round(raw_days)
+    # Regression coefficients can differ from an exact integer by a few ULPs.
+    # Avoid turning an exact three-day crossing into four days because of noise.
+    if math.isclose(raw_days, nearest_integer, rel_tol=1e-12, abs_tol=1e-12):
+        return int(nearest_integer)
+    return int(math.ceil(raw_days))
 
 
 def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
