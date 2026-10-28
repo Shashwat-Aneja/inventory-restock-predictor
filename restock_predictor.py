@@ -43,12 +43,13 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
 
 
 def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
+    """Print the forecast and return a structured summary for downstream use."""
     if not math.isfinite(threshold) or threshold < 0:
         print("❌ Restock threshold must be a finite, non-negative number.")
-        return
+        return None
     if not isinstance(days_ahead, int) or isinstance(days_ahead, bool) or days_ahead < 1:
         print("❌ Forecast horizon must be a positive whole number of days.")
-        return
+        return None
 
     try:
         df = pd.read_csv(csv_file)
@@ -56,10 +57,10 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         required_columns = {"day", "stock_left"}
         if not required_columns.issubset(df.columns):
             print("❌ CSV must include 'day' and 'stock_left' columns.")
-            return
+            return None
         if df.empty:
             print("❌ CSV contains no inventory records.")
-            return
+            return None
 
         df = df.copy()
         for column in ("day", "stock_left"):
@@ -69,13 +70,13 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         all_finite = values.apply(lambda column: column.map(math.isfinite)).all().all()
         if values.isna().any().any() or not all_finite:
             print("❌ 'day' and 'stock_left' must contain finite numeric values.")
-            return
+            return None
         if (df["stock_left"] < 0).any():
             print("❌ 'stock_left' cannot contain negative inventory counts.")
-            return
+            return None
         if df["day"].nunique() < 2:
             print("❌ At least two distinct day values are required for a forecast.")
-            return
+            return None
 
         # Aggregate repeated observations for a day so duplicate rows do not
         # give that day extra weight in the regression model.
@@ -97,6 +98,16 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         days_to_threshold = estimate_days_until_threshold(
             float(y.iloc[-1]), daily_change, threshold
         )
+        status = classify_stock_status(predicted_stock, threshold)
+        summary = {
+            "target_day": float(target_day),
+            "predicted_stock": float(predicted_stock),
+            "daily_stock_change": float(daily_change),
+            "days_until_threshold": days_to_threshold,
+            "restock_threshold": float(threshold),
+            "status": status,
+            "history_points": int(len(df)),
+        }
 
         print("\n📦 Inventory Restock Predictor")
         print("----------------------------")
@@ -111,7 +122,6 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         else:
             print(f"Estimated days until threshold: {days_to_threshold}")
 
-        status = classify_stock_status(predicted_stock, threshold)
         print(f"Stock risk: {status}")
         if status == "critical":
             print("⚠ Critical: Forecast stock is at or below half the threshold. Prioritize restocking.")
@@ -121,9 +131,11 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             print("✔ Stock levels are safe for now.")
 
         print("--------------------------------\n")
+        return summary
 
     except (OSError, pd.errors.ParserError, ValueError) as e:
         print(f"❌ Error: {e}")
+        return None
 
 
 def main():
