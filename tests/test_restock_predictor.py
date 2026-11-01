@@ -230,3 +230,25 @@ def test_predictor_reports_fitted_daily_stock_change(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "Estimated daily stock change: -100.00 units/day" in output
+
+def test_numeric_helpers_reject_strings_booleans_and_none():
+    import pytest
+    from restock_predictor import classify_stock_status, estimate_days_until_threshold
+
+    for value in ("500", True, None):
+        with pytest.raises(ValueError, match="finite number"):
+            classify_stock_status(value, 100)
+
+    with pytest.raises(ValueError, match="finite number"):
+        estimate_days_until_threshold(800, "−100", 500)
+
+
+def test_predictor_reports_non_numeric_threshold_without_raising(tmp_path, capsys):
+    csv_path = tmp_path / "inventory.csv"
+    pd.DataFrame({"day": [1, 2], "stock_left": [900, 800]}).to_csv(
+        csv_path, index=False
+    )
+
+    assert predict_restock(str(csv_path), threshold="500") is None
+    assert "finite, non-negative number" in capsys.readouterr().out
+
