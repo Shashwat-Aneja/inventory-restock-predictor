@@ -1,5 +1,6 @@
 import argparse
 import math
+from numbers import Real
 
 import pandas as pd
 from sklearn.linear_model import LinearRegression
@@ -7,11 +8,23 @@ from sklearn.linear_model import LinearRegression
 RESTOCK_THRESHOLD = 500  # Minimum safe stock level
 
 
+def _finite_number(value, label):
+    """Validate a real numeric input without accepting booleans or numeric strings."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise ValueError(f"{label} must be a finite number.")
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        raise ValueError(f"{label} must be a finite number.")
+    return numeric
+
+
 def classify_stock_status(predicted_stock, threshold):
     """Classify forecast stock as critical, restock-needed, or healthy."""
-    if not math.isfinite(predicted_stock) or predicted_stock < 0:
+    predicted_stock = _finite_number(predicted_stock, "Predicted stock")
+    threshold = _finite_number(threshold, "Restock threshold")
+    if predicted_stock < 0:
         raise ValueError("Predicted stock must be a finite, non-negative number.")
-    if not math.isfinite(threshold) or threshold < 0:
+    if threshold < 0:
         raise ValueError("Restock threshold must be a finite, non-negative number.")
     if predicted_stock < threshold:
         if threshold > 0 and predicted_stock <= threshold * 0.5:
@@ -26,13 +39,9 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     Returns zero when stock is already at/below the threshold, or None when
     the fitted trend is flat/increasing and therefore does not predict a crossing.
     """
-    for label, value in (
-        ("Current stock", current_stock),
-        ("Daily stock change", daily_change),
-        ("Restock threshold", threshold),
-    ):
-        if not math.isfinite(value):
-            raise ValueError(f"{label} must be a finite number.")
+    current_stock = _finite_number(current_stock, "Current stock")
+    daily_change = _finite_number(daily_change, "Daily stock change")
+    threshold = _finite_number(threshold, "Restock threshold")
     if current_stock < 0 or threshold < 0:
         raise ValueError("Stock and threshold must be non-negative.")
     if current_stock <= threshold:
@@ -51,7 +60,12 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
 
 def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
     """Print the forecast and return a structured summary for downstream use."""
-    if not math.isfinite(threshold) or threshold < 0:
+    try:
+        threshold = _finite_number(threshold, "Restock threshold")
+    except ValueError:
+        print("❌ Restock threshold must be a finite, non-negative number.")
+        return None
+    if threshold < 0:
         print("❌ Restock threshold must be a finite, non-negative number.")
         return None
     if not isinstance(days_ahead, int) or isinstance(days_ahead, bool) or days_ahead < 1:
