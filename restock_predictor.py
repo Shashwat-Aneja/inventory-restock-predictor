@@ -92,6 +92,9 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         if values.isna().any().any() or not all_finite:
             print("❌ 'day' and 'stock_left' must contain finite numeric values.")
             return None
+        if any(not float(day).is_integer() for day in df["day"]):
+            print("❌ 'day' must contain whole-number day indexes.")
+            return None
         if (df["stock_left"] < 0).any():
             print("❌ 'stock_left' cannot contain negative inventory counts.")
             return None
