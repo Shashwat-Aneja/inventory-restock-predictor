@@ -13,4 +13,5 @@ def test_forecast_never_reports_negative_physical_inventory(tmp_path, capsys):
 
     output = capsys.readouterr().out
     assert "Predicted stock for next day: 0.00" in output
-    assert "Warning: Stock will fall below threshold" in output
+    assert "Stock risk: critical" in output
+    assert "Critical: Forecast stock is at or below half the threshold" in output

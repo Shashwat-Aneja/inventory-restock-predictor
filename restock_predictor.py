@@ -162,7 +162,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         return None
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Forecast next-day inventory and flag low-stock risk."
     )
@@ -179,13 +179,15 @@ def main():
         default=1,
         help="Number of days beyond the latest observation to forecast (default: 1)",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not math.isfinite(args.threshold) or args.threshold < 0:
         parser.error("--threshold must be a finite, non-negative number")
     if args.days_ahead < 1:
         parser.error("--days-ahead must be a positive whole number")
-    predict_restock(args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead)
+    return 0 if predict_restock(
+        args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead
+    ) is not None else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
