@@ -119,7 +119,11 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         model = LinearRegression()
         model.fit(X, y)
 
-        target_day = float(X["day"].max()) + days_ahead
+        latest_day = float(X["day"].max())
+        if latest_day + days_ahead > MAX_SAFE_DAY or latest_day + days_ahead < -MAX_SAFE_DAY:
+            print("❌ Forecast target day exceeds the exact float64 integer range.")
+            return None
+        target_day = latest_day + days_ahead
         # Inventory cannot be negative; clamp extrapolated estimates at zero.
         predicted_stock = max(0.0, float(model.predict([[target_day]])[0]))
         daily_change = float(model.coef_[0])
