@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 RESTOCK_THRESHOLD = 500  # Minimum safe stock level
+MAX_SAFE_DAY = 2**53 - 1  # Largest integer exactly represented by float64
 
 
 def _finite_number(value, label):
@@ -94,6 +95,9 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             return None
         if any(not float(day).is_integer() for day in df["day"]):
             print("❌ 'day' must contain whole-number day indexes.")
+            return None
+        if (df["day"].abs() > MAX_SAFE_DAY).any():
+            print("❌ Day indexes must be within the exact float64 integer range.")
             return None
         if (df["stock_left"] < 0).any():
             print("❌ 'stock_left' cannot contain negative inventory counts.")
