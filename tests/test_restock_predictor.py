@@ -260,3 +260,11 @@ def test_predictor_rejects_day_indexes_beyond_float_precision(tmp_path, capsys):
 
     assert predict_restock(str(csv_path)) is None
     assert "exact float64 integer range" in capsys.readouterr().out
+
+
+def test_predictor_rejects_forecast_target_beyond_float_precision(tmp_path, capsys):
+    csv_path = tmp_path / "near-limit.csv"
+    csv_path.write_text("day,stock_left\n9007199254740989,100\n9007199254740990,90\n")
+
+    assert predict_restock(str(csv_path), days_ahead=2) is None
+    assert "Forecast target day exceeds" in capsys.readouterr().out
