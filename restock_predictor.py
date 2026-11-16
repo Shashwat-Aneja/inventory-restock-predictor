@@ -51,6 +51,8 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
         return None
 
     raw_days = (current_stock - threshold) / -daily_change
+    if not math.isfinite(raw_days):
+        raise ValueError("Threshold crossing exceeds the supported numeric range.")
     nearest_integer = round(raw_days)
     # Regression coefficients can differ from an exact integer by a few ULPs.
     # Avoid turning an exact three-day crossing into four days because of noise.
