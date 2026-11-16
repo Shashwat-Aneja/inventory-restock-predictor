@@ -56,7 +56,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     nearest_integer = round(raw_days)
     # Regression coefficients can differ from an exact integer by a few ULPs.
     # Avoid turning an exact three-day crossing into four days because of noise.
-    if math.isclose(raw_days, nearest_integer, rel_tol=1e-12, abs_tol=1e-12):
+    if math.isclose(raw_days, nearest_integer, rel_tol=0.0, abs_tol=1e-12):
         return int(nearest_integer)
     return int(math.ceil(raw_days))
 
