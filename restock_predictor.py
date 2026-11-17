@@ -51,10 +51,12 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
         return None
 
     raw_days = (current_stock - threshold) / -daily_change
+    if not math.isfinite(raw_days):
+        raise ValueError("Threshold crossing exceeds the supported numeric range.")
     nearest_integer = round(raw_days)
     # Regression coefficients can differ from an exact integer by a few ULPs.
     # Avoid turning an exact three-day crossing into four days because of noise.
-    if math.isclose(raw_days, nearest_integer, rel_tol=1e-12, abs_tol=1e-12):
+    if math.isclose(raw_days, nearest_integer, rel_tol=0.0, abs_tol=1e-12):
         return int(nearest_integer)
     return int(math.ceil(raw_days))
 
@@ -125,7 +127,10 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             return None
         target_day = latest_day + days_ahead
         # Inventory cannot be negative; clamp extrapolated estimates at zero.
-        predicted_stock = max(0.0, float(model.predict([[target_day]])[0]))
+        raw_prediction = float(model.predict([[target_day]])[0])
+        if not math.isfinite(raw_prediction):
+            raise ValueError("Forecast stock must be a finite number.")
+        predicted_stock = max(0.0, raw_prediction)
         daily_change = float(model.coef_[0])
         days_to_threshold = estimate_days_until_threshold(
             float(y.iloc[-1]), daily_change, threshold
