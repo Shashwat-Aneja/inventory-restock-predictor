@@ -127,7 +127,10 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             return None
         target_day = latest_day + days_ahead
         # Inventory cannot be negative; clamp extrapolated estimates at zero.
-        predicted_stock = max(0.0, float(model.predict([[target_day]])[0]))
+        raw_prediction = float(model.predict([[target_day]])[0])
+        if not math.isfinite(raw_prediction):
+            raise ValueError("Forecast stock must be a finite number.")
+        predicted_stock = max(0.0, raw_prediction)
         daily_change = float(model.coef_[0])
         days_to_threshold = estimate_days_until_threshold(
             float(y.iloc[-1]), daily_change, threshold
