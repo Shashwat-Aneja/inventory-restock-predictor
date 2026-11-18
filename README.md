@@ -96,3 +96,5 @@ The horizon must be a positive whole number. The default of `1` preserves the ex
 ## Forecast bounds
 
 Linear extrapolation can mathematically produce negative values even though physical inventory cannot be negative. The predictor floors the displayed forecast at `0.00`; restock-risk evaluation uses that bounded estimate.
+
+Inventory regression uses day offsets relative to the first observation, avoiding large-intercept cancellation when valid day indexes are numerically large.
