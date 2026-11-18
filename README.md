@@ -98,3 +98,5 @@ The horizon must be a positive whole number. The default of `1` preserves the ex
 Linear extrapolation can mathematically produce negative values even though physical inventory cannot be negative. The predictor floors the displayed forecast at `0.00`; restock-risk evaluation uses that bounded estimate.
 
 Inventory regression uses day offsets relative to the first observation, avoiding large-intercept cancellation when valid day indexes are numerically large.
+
+An estimated threshold crossing is at least one day when current stock is still above the threshold, even when floating-point tolerance places the positive crossing very close to zero.
