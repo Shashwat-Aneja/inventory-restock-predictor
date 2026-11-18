@@ -57,7 +57,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     # Regression coefficients can differ from an exact integer by a few ULPs.
     # Avoid turning an exact three-day crossing into four days because of noise.
     if math.isclose(raw_days, nearest_integer, rel_tol=0.0, abs_tol=1e-12):
-        return int(nearest_integer)
+        return max(1, int(nearest_integer))
     return int(math.ceil(raw_days))
 
 
@@ -119,7 +119,8 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         y = df["stock_left"]
 
         model = LinearRegression()
-        model.fit(X, y)
+        origin_day = float(X["day"].iloc[0])
+        model.fit(X - origin_day, y)
 
         latest_day = float(X["day"].max())
         if latest_day + days_ahead > MAX_SAFE_DAY or latest_day + days_ahead < -MAX_SAFE_DAY:
@@ -127,7 +128,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             return None
         target_day = latest_day + days_ahead
         # Inventory cannot be negative; clamp extrapolated estimates at zero.
-        raw_prediction = float(model.predict([[target_day]])[0])
+        raw_prediction = float(model.predict(pd.DataFrame({"day": [target_day - origin_day]}))[0])
         if not math.isfinite(raw_prediction):
             raise ValueError("Forecast stock must be a finite number.")
         predicted_stock = max(0.0, raw_prediction)
