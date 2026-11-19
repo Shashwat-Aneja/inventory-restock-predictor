@@ -2,6 +2,7 @@ import argparse
 import math
 from numbers import Real
 
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
@@ -86,6 +87,8 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             print("❌ CSV contains no inventory records.")
             return None
 
+        if df[["day", "stock_left"]].apply(lambda column: column.map(lambda value: isinstance(value, (bool, np.bool_)))).any().any():
+            raise ValueError("Inventory values must be numeric, not booleans.")
         df = df.copy()
         for column in ("day", "stock_left"):
             df[column] = pd.to_numeric(df[column], errors="coerce")
