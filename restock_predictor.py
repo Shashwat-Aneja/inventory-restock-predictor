@@ -2,6 +2,7 @@ import argparse
 import math
 from numbers import Real
 
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
@@ -86,6 +87,8 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             print("❌ CSV contains no inventory records.")
             return None
 
+        if df[["day", "stock_left"]].apply(lambda column: column.map(lambda value: isinstance(value, (bool, np.bool_)))).any().any():
+            raise ValueError("Inventory values must be numeric, not booleans.")
         df = df.copy()
         for column in ("day", "stock_left"):
             df[column] = pd.to_numeric(df[column], errors="coerce")
@@ -112,7 +115,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         # give that day extra weight in the regression model.
         df = (
             df.groupby("day", as_index=False)["stock_left"]
-            .mean()
+            .agg(lambda values: float(values.max()) * (math.fsum(float(value / values.max()) for value in values) / len(values)) if values.max() else 0.0)
             .sort_values("day")
         )
         X = df[["day"]]
@@ -120,7 +123,8 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
 
         model = LinearRegression()
         origin_day = float(X["day"].iloc[0])
-        model.fit(X - origin_day, y)
+        stock_scale = float(y.max()) or 1.0
+        model.fit(X - origin_day, y / stock_scale)
 
         latest_day = float(X["day"].max())
         if latest_day + days_ahead > MAX_SAFE_DAY or latest_day + days_ahead < -MAX_SAFE_DAY:
@@ -128,11 +132,11 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             return None
         target_day = latest_day + days_ahead
         # Inventory cannot be negative; clamp extrapolated estimates at zero.
-        raw_prediction = float(model.predict(pd.DataFrame({"day": [target_day - origin_day]}))[0])
+        raw_prediction = float(model.predict(pd.DataFrame({"day": [target_day - origin_day]}))[0]) * stock_scale
         if not math.isfinite(raw_prediction):
             raise ValueError("Forecast stock must be a finite number.")
         predicted_stock = max(0.0, raw_prediction)
-        daily_change = float(model.coef_[0])
+        daily_change = float(model.coef_[0]) * stock_scale
         days_to_threshold = estimate_days_until_threshold(
             float(y.iloc[-1]), daily_change, threshold
         )
