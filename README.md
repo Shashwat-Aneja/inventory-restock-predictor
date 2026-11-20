@@ -100,3 +100,5 @@ Linear extrapolation can mathematically produce negative values even though phys
 Inventory regression uses day offsets relative to the first observation, avoiding large-intercept cancellation when valid day indexes are numerically large.
 
 An estimated threshold crossing is at least one day when current stock is still above the threshold, even when floating-point tolerance places the positive crossing very close to zero.
+
+`--json` prints only the structured forecast summary on success, including target day, stock risk and threshold-crossing estimate. Validation failures retain a nonzero exit status.

@@ -1,4 +1,8 @@
+import csv
+import os
+from pathlib import Path
 import argparse
+import json
 import math
 from numbers import Real
 
@@ -8,6 +12,15 @@ from sklearn.linear_model import LinearRegression
 
 RESTOCK_THRESHOLD = 500  # Minimum safe stock level
 MAX_SAFE_DAY = 2**53 - 1  # Largest integer exactly represented by float64
+
+
+def _reject_duplicate_headers(csv_file):
+    """Do not let pandas silently rename ambiguous source CSV columns."""
+    if isinstance(csv_file, (str, os.PathLike)) and Path(csv_file).is_file():
+        with open(csv_file, encoding="utf-8-sig", newline="") as source:
+            headers = next(csv.reader(source), [])
+        if len(headers) != len(set(headers)):
+            raise ValueError("CSV column names must be unique; duplicate headers are ambiguous.")
 
 
 def _finite_number(value, label):
@@ -62,7 +75,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False):
     """Print the forecast and return a structured summary for downstream use."""
     try:
         threshold = _finite_number(threshold, "Restock threshold")
@@ -78,6 +91,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
 
     try:
         df = pd.read_csv(csv_file)
+        _reject_duplicate_headers(csv_file)
 
         required_columns = {"day", "stock_left"}
         if not required_columns.issubset(df.columns):
@@ -101,7 +115,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         if any(not float(day).is_integer() for day in df["day"]):
             print("❌ 'day' must contain whole-number day indexes.")
             return None
-        if (df["day"].abs() > MAX_SAFE_DAY).any():
+        if df["day"].map(lambda value: abs(int(value)) > MAX_SAFE_DAY).any():
             print("❌ Day indexes must be within the exact float64 integer range.")
             return None
         if (df["stock_left"] < 0).any():
@@ -126,7 +140,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         stock_scale = float(y.max()) or 1.0
         model.fit(X - origin_day, y / stock_scale)
 
-        latest_day = float(X["day"].max())
+        latest_day = int(X["day"].max())
         if latest_day + days_ahead > MAX_SAFE_DAY or latest_day + days_ahead < -MAX_SAFE_DAY:
             print("❌ Forecast target day exceeds the exact float64 integer range.")
             return None
@@ -150,6 +164,10 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             "status": status,
             "history_points": int(len(df)),
         }
+
+        if json_output:
+            print(json.dumps(summary, allow_nan=False))
+            return summary
 
         print("\n📦 Inventory Restock Predictor")
         print("----------------------------")
@@ -197,13 +215,15 @@ def main(argv=None):
         default=1,
         help="Number of days beyond the latest observation to forecast (default: 1)",
     )
+    parser.add_argument("--json", action="store_true", help="Print only the structured forecast summary as JSON on success")
     args = parser.parse_args(argv)
     if not math.isfinite(args.threshold) or args.threshold < 0:
         parser.error("--threshold must be a finite, non-negative number")
     if args.days_ahead < 1:
         parser.error("--days-ahead must be a positive whole number")
+    options = {"json_output": True} if args.json else {}
     return 0 if predict_restock(
-        args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead
+        args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead, **options
     ) is not None else 1
 
 
