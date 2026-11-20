@@ -2,6 +2,7 @@ import csv
 import os
 from pathlib import Path
 import argparse
+import json
 import math
 from numbers import Real
 
@@ -74,7 +75,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False):
     """Print the forecast and return a structured summary for downstream use."""
     try:
         threshold = _finite_number(threshold, "Restock threshold")
@@ -164,6 +165,10 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
             "history_points": int(len(df)),
         }
 
+        if json_output:
+            print(json.dumps(summary, allow_nan=False))
+            return summary
+
         print("\n📦 Inventory Restock Predictor")
         print("----------------------------")
         if days_ahead == 1:
@@ -210,13 +215,15 @@ def main(argv=None):
         default=1,
         help="Number of days beyond the latest observation to forecast (default: 1)",
     )
+    parser.add_argument("--json", action="store_true", help="Print only the structured forecast summary as JSON on success")
     args = parser.parse_args(argv)
     if not math.isfinite(args.threshold) or args.threshold < 0:
         parser.error("--threshold must be a finite, non-negative number")
     if args.days_ahead < 1:
         parser.error("--days-ahead must be a positive whole number")
+    options = {"json_output": True} if args.json else {}
     return 0 if predict_restock(
-        args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead
+        args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead, **options
     ) is not None else 1
 
 
