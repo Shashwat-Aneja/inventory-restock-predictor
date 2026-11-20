@@ -114,7 +114,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         if any(not float(day).is_integer() for day in df["day"]):
             print("❌ 'day' must contain whole-number day indexes.")
             return None
-        if (df["day"].abs() > MAX_SAFE_DAY).any():
+        if df["day"].map(lambda value: abs(int(value)) > MAX_SAFE_DAY).any():
             print("❌ Day indexes must be within the exact float64 integer range.")
             return None
         if (df["stock_left"] < 0).any():
@@ -139,7 +139,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
         stock_scale = float(y.max()) or 1.0
         model.fit(X - origin_day, y / stock_scale)
 
-        latest_day = float(X["day"].max())
+        latest_day = int(X["day"].max())
         if latest_day + days_ahead > MAX_SAFE_DAY or latest_day + days_ahead < -MAX_SAFE_DAY:
             print("❌ Forecast target day exceeds the exact float64 integer range.")
             return None
