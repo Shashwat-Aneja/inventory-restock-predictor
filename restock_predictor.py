@@ -1,3 +1,6 @@
+import csv
+import os
+from pathlib import Path
 import argparse
 import math
 from numbers import Real
@@ -8,6 +11,15 @@ from sklearn.linear_model import LinearRegression
 
 RESTOCK_THRESHOLD = 500  # Minimum safe stock level
 MAX_SAFE_DAY = 2**53 - 1  # Largest integer exactly represented by float64
+
+
+def _reject_duplicate_headers(csv_file):
+    """Do not let pandas silently rename ambiguous source CSV columns."""
+    if isinstance(csv_file, (str, os.PathLike)) and Path(csv_file).is_file():
+        with open(csv_file, encoding="utf-8-sig", newline="") as source:
+            headers = next(csv.reader(source), [])
+        if len(headers) != len(set(headers)):
+            raise ValueError("CSV column names must be unique; duplicate headers are ambiguous.")
 
 
 def _finite_number(value, label):
@@ -78,6 +90,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1):
 
     try:
         df = pd.read_csv(csv_file)
+        _reject_duplicate_headers(csv_file)
 
         required_columns = {"day", "stock_left"}
         if not required_columns.issubset(df.columns):
