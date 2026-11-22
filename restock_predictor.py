@@ -14,11 +14,19 @@ RESTOCK_THRESHOLD = 500  # Minimum safe stock level
 MAX_SAFE_DAY = 2**53 - 1  # Largest integer exactly represented by float64
 
 
-def _reject_duplicate_headers(csv_file):
+def _read_csv_input(csv_file, delimiter=",", **options):
+    if delimiter not in (",", ";", "\t", "|"):
+        raise ValueError("Unsupported input delimiter.")
+    frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
+    _reject_duplicate_headers(csv_file, delimiter)
+    return frame
+
+
+def _reject_duplicate_headers(csv_file, delimiter=","):
     """Do not let pandas silently rename ambiguous source CSV columns."""
     if isinstance(csv_file, (str, os.PathLike)) and Path(csv_file).is_file():
         with open(csv_file, encoding="utf-8-sig", newline="") as source:
-            headers = next(csv.reader(source), [])
+            headers = next(csv.reader(source, delimiter=delimiter), [])
         if len(headers) != len(set(headers)):
             raise ValueError("CSV column names must be unique; duplicate headers are ambiguous.")
 
@@ -75,7 +83,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None):
     """Print the forecast and return a structured summary for downstream use."""
     try:
         threshold = _finite_number(threshold, "Restock threshold")
@@ -89,9 +97,11 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         print("❌ Forecast horizon must be a positive whole number of days.")
         return None
 
+    if lookback_points is not None and (not isinstance(lookback_points, int) or isinstance(lookback_points, bool) or lookback_points < 2):
+        print("❌ lookback_points must be an integer of at least two.")
+        return None
     try:
-        df = pd.read_csv(csv_file)
-        _reject_duplicate_headers(csv_file)
+        df = _read_csv_input(csv_file, delimiter)
 
         required_columns = {"day", "stock_left"}
         if not required_columns.issubset(df.columns):
@@ -132,6 +142,9 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
             .agg(lambda values: float(values.max()) * (math.fsum(float(value / values.max()) for value in values) / len(values)) if values.max() else 0.0)
             .sort_values("day")
         )
+        available_history_points = len(df)
+        if lookback_points is not None:
+            df = df.tail(lookback_points).copy()
         X = df[["day"]]
         y = df["stock_left"]
 
@@ -163,6 +176,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
             "restock_threshold": float(threshold),
             "status": status,
             "history_points": int(len(df)),
+            "available_history_points": int(available_history_points),
         }
 
         if json_output:
@@ -216,12 +230,19 @@ def main(argv=None):
         help="Number of days beyond the latest observation to forecast (default: 1)",
     )
     parser.add_argument("--json", action="store_true", help="Print only the structured forecast summary as JSON on success")
+    parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
+    parser.add_argument("--lookback-points", type=int, help="Fit only the latest N distinct observed days, after daily aggregation")
     args = parser.parse_args(argv)
+    delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     if not math.isfinite(args.threshold) or args.threshold < 0:
         parser.error("--threshold must be a finite, non-negative number")
     if args.days_ahead < 1:
         parser.error("--days-ahead must be a positive whole number")
     options = {"json_output": True} if args.json else {}
+    if args.lookback_points is not None:
+        options["lookback_points"] = args.lookback_points
+    if delimiter != ",":
+        options["delimiter"] = delimiter
     return 0 if predict_restock(
         args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead, **options
     ) is not None else 1
