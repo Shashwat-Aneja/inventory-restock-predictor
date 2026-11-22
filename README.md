@@ -104,3 +104,5 @@ An estimated threshold crossing is at least one day when current stock is still 
 `--json` prints only the structured forecast summary on success, including target day, stock risk and threshold-crossing estimate. Validation failures retain a nonzero exit status.
 
 `--delimiter ";"`, `--delimiter tab` and `--delimiter "|"` support alternate input CSV separators, including quoted fields. Duplicate-header validation uses the selected separator. The default input and all CSV exports remain comma-separated.
+
+`--lookback-points N` fits the most recent N distinct observed days after duplicate-day aggregation. The summary reports selected and available history counts. This is an observation window, not necessarily N consecutive calendar days; the default uses all history.
