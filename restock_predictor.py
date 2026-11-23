@@ -1,3 +1,4 @@
+import io
 import csv
 import os
 from pathlib import Path
@@ -17,18 +18,67 @@ MAX_SAFE_DAY = 2**53 - 1  # Largest integer exactly represented by float64
 def _read_csv_input(csv_file, delimiter=",", **options):
     if delimiter not in (",", ";", "\t", "|"):
         raise ValueError("Unsupported input delimiter.")
-    frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
     _reject_duplicate_headers(csv_file, delimiter)
+    frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
     return frame
 
 
 def _reject_duplicate_headers(csv_file, delimiter=","):
-    """Do not let pandas silently rename ambiguous source CSV columns."""
-    if isinstance(csv_file, (str, os.PathLike)) and Path(csv_file).is_file():
+    """Inspect original UTF-8 CSV headers without taking ownership of streams."""
+    def header_lines(source):
+        # csv.reader needs physical lines even for StringIO objects whose default
+        # iterator does not recognize CR-only records. Preserve quoted newlines.
+        pending = ""
+        first = True
+        started = False
+        while True:
+            chars = []
+            while True:
+                char = pending or source.read(1)
+                pending = ""
+                if not char:
+                    break
+                if first:
+                    first = False
+                    if char == "\ufeff":
+                        continue
+                chars.append(char)
+                if char == "\r":
+                    following = source.read(1)
+                    if following == "\n":
+                        chars.append(following)
+                    else:
+                        pending = following
+                    break
+                if char == "\n":
+                    break
+            if not chars:
+                return
+            line = "".join(chars)
+            if not started and not line.strip():
+                continue
+            started = True
+            yield line
+
+    if isinstance(csv_file, (str, os.PathLike)):
+        if not Path(csv_file).is_file():
+            return
         with open(csv_file, encoding="utf-8-sig", newline="") as source:
-            headers = next(csv.reader(source, delimiter=delimiter), [])
-        if len(headers) != len(set(headers)):
-            raise ValueError("CSV column names must be unique; duplicate headers are ambiguous.")
+            headers = next(csv.reader(header_lines(source), delimiter=delimiter), [])
+    else:
+        if not all(hasattr(csv_file, name) for name in ("read", "seek", "tell")) or (hasattr(csv_file, "seekable") and not csv_file.seekable()):
+            raise ValueError("CSV streams must be seekable for header validation.")
+        position = csv_file.tell()
+        binary = isinstance(csv_file.read(0), bytes)
+        source = io.TextIOWrapper(csv_file, encoding="utf-8-sig", newline="") if binary else csv_file
+        try:
+            headers = next(csv.reader(header_lines(source), delimiter=delimiter), [])
+        finally:
+            if binary:
+                source.detach()
+            csv_file.seek(position)
+    if len(headers) != len(set(headers)):
+        raise ValueError("CSV column names must be unique; duplicate headers are ambiguous.")
 
 
 def _finite_number(value, label):
@@ -162,6 +212,11 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         raw_prediction = float(model.predict(pd.DataFrame({"day": [target_day - origin_day]}))[0]) * stock_scale
         if not math.isfinite(raw_prediction):
             raise ValueError("Forecast stock must be a finite number.")
+        fitted_normalized = model.predict(X - origin_day)
+        normalized_residuals = y.to_numpy(dtype=float) / stock_scale - fitted_normalized
+        historical_fit_mae = stock_scale * (math.fsum(abs(float(value)) for value in normalized_residuals) / len(y))
+        if not math.isfinite(historical_fit_mae):
+            raise ValueError("Historical fit diagnostics exceed the supported range.")
         predicted_stock = max(0.0, raw_prediction)
         daily_change = float(model.coef_[0]) * stock_scale
         days_to_threshold = estimate_days_until_threshold(
@@ -176,6 +231,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
             "restock_threshold": float(threshold),
             "status": status,
             "history_points": int(len(df)),
+            "historical_fit_mae": float(historical_fit_mae),
             "available_history_points": int(available_history_points),
         }
 
@@ -190,6 +246,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         else:
             print(f"Predicted stock for day {target_day:g} ({days_ahead} days ahead): {predicted_stock:.2f}")
         print(f"Estimated daily stock change: {daily_change:+.2f} units/day")
+        print(f"Historical fit MAE (in-sample): {historical_fit_mae:.2f} units")
 
         if days_to_threshold is None:
             print("Estimated days until threshold: no decline indicated by trend")
