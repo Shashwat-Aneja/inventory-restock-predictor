@@ -212,6 +212,11 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         raw_prediction = float(model.predict(pd.DataFrame({"day": [target_day - origin_day]}))[0]) * stock_scale
         if not math.isfinite(raw_prediction):
             raise ValueError("Forecast stock must be a finite number.")
+        fitted_normalized = model.predict(X - origin_day)
+        normalized_residuals = y.to_numpy(dtype=float) / stock_scale - fitted_normalized
+        historical_fit_mae = stock_scale * (math.fsum(abs(float(value)) for value in normalized_residuals) / len(y))
+        if not math.isfinite(historical_fit_mae):
+            raise ValueError("Historical fit diagnostics exceed the supported range.")
         predicted_stock = max(0.0, raw_prediction)
         daily_change = float(model.coef_[0]) * stock_scale
         days_to_threshold = estimate_days_until_threshold(
@@ -226,6 +231,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
             "restock_threshold": float(threshold),
             "status": status,
             "history_points": int(len(df)),
+            "historical_fit_mae": float(historical_fit_mae),
             "available_history_points": int(available_history_points),
         }
 
@@ -240,6 +246,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         else:
             print(f"Predicted stock for day {target_day:g} ({days_ahead} days ahead): {predicted_stock:.2f}")
         print(f"Estimated daily stock change: {daily_change:+.2f} units/day")
+        print(f"Historical fit MAE (in-sample): {historical_fit_mae:.2f} units")
 
         if days_to_threshold is None:
             print("Estimated days until threshold: no decline indicated by trend")

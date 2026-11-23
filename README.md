@@ -108,3 +108,5 @@ An estimated threshold crossing is at least one day when current stock is still 
 `--lookback-points N` fits the most recent N distinct observed days after duplicate-day aggregation. The summary reports selected and available history counts. This is an observation window, not necessarily N consecutive calendar days; the default uses all history.
 
 Seekable caller-owned text and UTF-8 binary CSV streams now receive the same duplicate-header checks as file paths, before pandas can rename ambiguous columns. Validation restores the starting position and leaves caller streams open; nonseekable stream objects are rejected explicitly.
+
+Structured results and human reports include `historical_fit_mae` in stock units for the selected history window. It is explicitly an in-sample fit diagnostic, not an out-of-sample accuracy estimate or a guarantee of future inventory levels. Computation stays scaled to support large finite stock values.
