@@ -106,3 +106,5 @@ An estimated threshold crossing is at least one day when current stock is still 
 `--delimiter ";"`, `--delimiter tab` and `--delimiter "|"` support alternate input CSV separators, including quoted fields. Duplicate-header validation uses the selected separator. The default input and all CSV exports remain comma-separated.
 
 `--lookback-points N` fits the most recent N distinct observed days after duplicate-day aggregation. The summary reports selected and available history counts. This is an observation window, not necessarily N consecutive calendar days; the default uses all history.
+
+Seekable caller-owned text and UTF-8 binary CSV streams now receive the same duplicate-header checks as file paths, before pandas can rename ambiguous columns. Validation restores the starting position and leaves caller streams open; nonseekable stream objects are rejected explicitly.
