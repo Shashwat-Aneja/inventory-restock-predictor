@@ -1,6 +1,7 @@
 import gzip
 import bz2
 import lzma
+import tempfile
 import io
 import csv
 import os
@@ -279,6 +280,25 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         return None
 
 
+def export_summary(summary, destination, source):
+    destination = Path(destination).expanduser().resolve()
+    source = Path(source).expanduser().resolve()
+    if destination == source or (destination.exists() and destination.samefile(source)):
+        raise ValueError("JSON output must differ from the inventory input.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(summary, handle, allow_nan=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Forecast next-day inventory and flag low-stock risk."
@@ -299,6 +319,7 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="Print only the structured forecast summary as JSON on success")
     parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
     parser.add_argument("--lookback-points", type=int, help="Fit only the latest N distinct observed days, after daily aggregation")
+    parser.add_argument("--output", help="Atomically save the structured forecast as JSON, distinct from the input")
     args = parser.parse_args(argv)
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     if not math.isfinite(args.threshold) or args.threshold < 0:
@@ -310,9 +331,16 @@ def main(argv=None):
         options["lookback_points"] = args.lookback_points
     if delimiter != ",":
         options["delimiter"] = delimiter
-    return 0 if predict_restock(
-        args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead, **options
-    ) is not None else 1
+    result = predict_restock(args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead, **options)
+    if result is None:
+        return 1
+    if args.output:
+        try:
+            export_summary(result, args.output, args.csv_file)
+        except (OSError, ValueError) as exc:
+            print(f"Error exporting inventory summary: {exc}")
+            return 1
+    return 0
 
 
 if __name__ == "__main__":
