@@ -1,3 +1,7 @@
+import gzip
+import bz2
+import lzma
+import tempfile
 import io
 import csv
 import os
@@ -19,7 +23,10 @@ def _read_csv_input(csv_file, delimiter=",", **options):
     if delimiter not in (",", ";", "\t", "|"):
         raise ValueError("Unsupported input delimiter.")
     _reject_duplicate_headers(csv_file, delimiter)
-    frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
+    try:
+        frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
+    except (EOFError, lzma.LZMAError) as exc:
+        raise ValueError("Compressed CSV input is corrupt or incomplete.") from exc
     return frame
 
 
@@ -63,8 +70,12 @@ def _reject_duplicate_headers(csv_file, delimiter=","):
     if isinstance(csv_file, (str, os.PathLike)):
         if not Path(csv_file).is_file():
             return
-        with open(csv_file, encoding="utf-8-sig", newline="") as source:
-            headers = next(csv.reader(header_lines(source), delimiter=delimiter), [])
+        opener = {".gz": gzip.open, ".bz2": bz2.open, ".xz": lzma.open}.get(Path(csv_file).suffix, open)
+        try:
+            with opener(csv_file, mode="rt", encoding="utf-8-sig", newline="") as source:
+                headers = next(csv.reader(header_lines(source), delimiter=delimiter), [])
+        except (EOFError, lzma.LZMAError) as exc:
+            raise ValueError("Compressed CSV input is corrupt or incomplete.") from exc
     else:
         if not all(hasattr(csv_file, name) for name in ("read", "seek", "tell")) or (hasattr(csv_file, "seekable") and not csv_file.seekable()):
             raise ValueError("CSV streams must be seekable for header validation.")
@@ -133,7 +144,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None):
     """Print the forecast and return a structured summary for downstream use."""
     try:
         threshold = _finite_number(threshold, "Restock threshold")
@@ -149,6 +160,9 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
 
     if lookback_points is not None and (not isinstance(lookback_points, int) or isinstance(lookback_points, bool) or lookback_points < 2):
         print("❌ lookback_points must be an integer of at least two.")
+        return None
+    if lead_time_days is not None and (not isinstance(lead_time_days, int) or isinstance(lead_time_days, bool) or not 0 <= lead_time_days <= MAX_SAFE_DAY):
+        print("Lead time must be a non-negative whole number within the supported day range.")
         return None
     try:
         df = _read_csv_input(csv_file, delimiter)
@@ -235,6 +249,9 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
             "available_history_points": int(available_history_points),
         }
 
+        if lead_time_days is not None:
+            summary["lead_time_days"] = lead_time_days
+            summary["reorder_before_delivery"] = days_to_threshold is not None and days_to_threshold <= lead_time_days
         if json_output:
             print(json.dumps(summary, allow_nan=False))
             return summary
@@ -269,6 +286,25 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         return None
 
 
+def export_summary(summary, destination, source):
+    destination = Path(destination).expanduser().resolve()
+    source = Path(source).expanduser().resolve()
+    if destination == source or (destination.exists() and destination.samefile(source)):
+        raise ValueError("JSON output must differ from the inventory input.")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent, delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(summary, handle, allow_nan=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Forecast next-day inventory and flag low-stock risk."
@@ -289,6 +325,8 @@ def main(argv=None):
     parser.add_argument("--json", action="store_true", help="Print only the structured forecast summary as JSON on success")
     parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
     parser.add_argument("--lookback-points", type=int, help="Fit only the latest N distinct observed days, after daily aggregation")
+    parser.add_argument("--output", help="Atomically save the structured forecast as JSON, distinct from the input")
+    parser.add_argument("--lead-time-days", type=int, help="Compare projected threshold runway with a supplier lead time; no order is placed")
     args = parser.parse_args(argv)
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     if not math.isfinite(args.threshold) or args.threshold < 0:
@@ -296,13 +334,22 @@ def main(argv=None):
     if args.days_ahead < 1:
         parser.error("--days-ahead must be a positive whole number")
     options = {"json_output": True} if args.json else {}
+    if args.lead_time_days is not None:
+        options["lead_time_days"] = args.lead_time_days
     if args.lookback_points is not None:
         options["lookback_points"] = args.lookback_points
     if delimiter != ",":
         options["delimiter"] = delimiter
-    return 0 if predict_restock(
-        args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead, **options
-    ) is not None else 1
+    result = predict_restock(args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead, **options)
+    if result is None:
+        return 1
+    if args.output:
+        try:
+            export_summary(result, args.output, args.csv_file)
+        except (OSError, ValueError) as exc:
+            print(f"Error exporting inventory summary: {exc}")
+            return 1
+    return 0
 
 
 if __name__ == "__main__":

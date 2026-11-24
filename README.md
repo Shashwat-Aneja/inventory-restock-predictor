@@ -110,3 +110,9 @@ An estimated threshold crossing is at least one day when current stock is still 
 Seekable caller-owned text and UTF-8 binary CSV streams now receive the same duplicate-header checks as file paths, before pandas can rename ambiguous columns. Validation restores the starting position and leaves caller streams open; nonseekable stream objects are rejected explicitly.
 
 Structured results and human reports include `historical_fit_mae` in stock units for the selected history window. It is explicitly an in-sample fit diagnostic, not an out-of-sample accuracy estimate or a guarantee of future inventory levels. Computation stays scaled to support large finite stock values.
+
+CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a separate file. Header validation reads the same compression format as pandas and still rejects duplicate columns, including BOM-prefixed quoted headers and alternate delimiters. Archive containers such as ZIP/TAR are outside this feature.
+
+`--output forecast.json` atomically persists the complete structured inventory result. The output must differ from the source (including hard-link aliases). A failed write/replace preserves the previous report and cleans temporary files.
+
+`--lead-time-days N` adds `reorder_before_delivery`, comparing projected days until the configured threshold with a non-negative supplier lead time. It is a trend-based planning flag; no order or hardware operation is performed. No declining crossing yields false; already-low stock has zero runway.
