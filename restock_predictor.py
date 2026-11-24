@@ -144,7 +144,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None):
     """Print the forecast and return a structured summary for downstream use."""
     try:
         threshold = _finite_number(threshold, "Restock threshold")
@@ -160,6 +160,9 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
 
     if lookback_points is not None and (not isinstance(lookback_points, int) or isinstance(lookback_points, bool) or lookback_points < 2):
         print("❌ lookback_points must be an integer of at least two.")
+        return None
+    if lead_time_days is not None and (not isinstance(lead_time_days, int) or isinstance(lead_time_days, bool) or not 0 <= lead_time_days <= MAX_SAFE_DAY):
+        print("Lead time must be a non-negative whole number within the supported day range.")
         return None
     try:
         df = _read_csv_input(csv_file, delimiter)
@@ -246,6 +249,9 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
             "available_history_points": int(available_history_points),
         }
 
+        if lead_time_days is not None:
+            summary["lead_time_days"] = lead_time_days
+            summary["reorder_before_delivery"] = days_to_threshold is not None and days_to_threshold <= lead_time_days
         if json_output:
             print(json.dumps(summary, allow_nan=False))
             return summary
@@ -320,6 +326,7 @@ def main(argv=None):
     parser.add_argument("--delimiter", choices=(",", ";", "tab", "|"), default=",", help="Input CSV delimiter; exports remain comma-separated")
     parser.add_argument("--lookback-points", type=int, help="Fit only the latest N distinct observed days, after daily aggregation")
     parser.add_argument("--output", help="Atomically save the structured forecast as JSON, distinct from the input")
+    parser.add_argument("--lead-time-days", type=int, help="Compare projected threshold runway with a supplier lead time; no order is placed")
     args = parser.parse_args(argv)
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     if not math.isfinite(args.threshold) or args.threshold < 0:
@@ -327,6 +334,8 @@ def main(argv=None):
     if args.days_ahead < 1:
         parser.error("--days-ahead must be a positive whole number")
     options = {"json_output": True} if args.json else {}
+    if args.lead_time_days is not None:
+        options["lead_time_days"] = args.lead_time_days
     if args.lookback_points is not None:
         options["lookback_points"] = args.lookback_points
     if delimiter != ",":

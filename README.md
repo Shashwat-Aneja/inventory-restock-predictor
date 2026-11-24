@@ -114,3 +114,5 @@ Structured results and human reports include `historical_fit_mae` in stock units
 CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a separate file. Header validation reads the same compression format as pandas and still rejects duplicate columns, including BOM-prefixed quoted headers and alternate delimiters. Archive containers such as ZIP/TAR are outside this feature.
 
 `--output forecast.json` atomically persists the complete structured inventory result. The output must differ from the source (including hard-link aliases). A failed write/replace preserves the previous report and cleans temporary files.
+
+`--lead-time-days N` adds `reorder_before_delivery`, comparing projected days until the configured threshold with a non-negative supplier lead time. It is a trend-based planning flag; no order or hardware operation is performed. No declining crossing yields false; already-low stock has zero runway.
