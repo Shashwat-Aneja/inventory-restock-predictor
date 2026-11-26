@@ -116,3 +116,5 @@ CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a se
 `--output forecast.json` atomically persists the complete structured inventory result. The output must differ from the source (including hard-link aliases). A failed write/replace preserves the previous report and cleans temporary files.
 
 `--lead-time-days N` adds `reorder_before_delivery`, comparing projected days until the configured threshold with a non-negative supplier lead time. It is a trend-based planning flag; no order or hardware operation is performed. No declining crossing yields false; already-low stock has zero runway.
+
+Corrupt compressed bodies, invalid DEFLATE blocks and header-parser limit failures use the normal validation-error path rather than escaping as EOFError, zlib.error or csv.Error. Header inspection restores caller stream position/ownership on these failures. No invalid input is exported.
