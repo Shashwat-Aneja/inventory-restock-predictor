@@ -20,14 +20,22 @@ RESTOCK_THRESHOLD = 500  # Minimum safe stock level
 MAX_SAFE_DAY = 2**53 - 1  # Largest integer exactly represented by float64
 
 
-def _read_csv_input(csv_file, delimiter=",", **options):
+def _read_csv_input(csv_file, delimiter=",", max_rows=None, **options):
+    if max_rows is not None and (isinstance(max_rows, bool) or not isinstance(max_rows, int) or not 1 <= max_rows <= 10_000_000):
+        raise ValueError("max_rows must be an integer from 1 to 10000000.")
     if delimiter not in (",", ";", "\t", "|"):
         raise ValueError("Unsupported input delimiter.")
+    if max_rows is not None:
+        if "nrows" in options:
+            raise ValueError("Do not combine nrows and max_rows.")
+        options["nrows"] = max_rows + 1
     _reject_duplicate_headers(csv_file, delimiter)
     try:
         frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
     except (EOFError, lzma.LZMAError, zlib.error, csv.Error) as exc:
         raise ValueError("CSV input is corrupt or incomplete, or its header exceeds parser limits.") from exc
+    if max_rows is not None and len(frame) > max_rows:
+        raise ValueError("CSV input exceeds the configured row limit.")
     return frame
 
 
@@ -147,7 +155,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None, max_rows=None):
     """Print the forecast and return a structured summary for downstream use."""
     try:
         threshold = _finite_number(threshold, "Restock threshold")
@@ -168,7 +176,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         print("Lead time must be a non-negative whole number within the supported day range.")
         return None
     try:
-        df = _read_csv_input(csv_file, delimiter)
+        df = _read_csv_input(csv_file, delimiter, **({"max_rows": max_rows} if max_rows is not None else {}))
 
         required_columns = {"day", "stock_left"}
         if not required_columns.issubset(df.columns):
@@ -330,7 +338,10 @@ def main(argv=None):
     parser.add_argument("--lookback-points", type=int, help="Fit only the latest N distinct observed days, after daily aggregation")
     parser.add_argument("--output", help="Atomically save the structured forecast as JSON, distinct from the input")
     parser.add_argument("--lead-time-days", type=int, help="Compare projected threshold runway with a supplier lead time; no order is placed")
+    parser.add_argument("--max-input-rows", type=int, help="Reject CSV files exceeding this raw row budget (1..10000000)")
     args = parser.parse_args(argv)
+    if args.max_input_rows is not None and not 1 <= args.max_input_rows <= 10_000_000:
+        parser.error("--max-input-rows must be from 1 to 10000000")
     delimiter = "\t" if args.delimiter == "tab" else args.delimiter
     if not math.isfinite(args.threshold) or args.threshold < 0:
         parser.error("--threshold must be a finite, non-negative number")
@@ -341,6 +352,8 @@ def main(argv=None):
         options["lead_time_days"] = args.lead_time_days
     if args.lookback_points is not None:
         options["lookback_points"] = args.lookback_points
+    if args.max_input_rows is not None:
+        options["max_rows"] = args.max_input_rows
     if delimiter != ",":
         options["delimiter"] = delimiter
     result = predict_restock(args.csv_file, threshold=args.threshold, days_ahead=args.days_ahead, **options)

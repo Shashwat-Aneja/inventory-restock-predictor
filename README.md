@@ -118,3 +118,7 @@ CSV paths ending in `.gz`, `.bz2`, or `.xz` are supported without unpacking a se
 `--lead-time-days N` adds `reorder_before_delivery`, comparing projected days until the configured threshold with a non-negative supplier lead time. It is a trend-based planning flag; no order or hardware operation is performed. No declining crossing yields false; already-low stock has zero runway.
 
 Corrupt compressed bodies, invalid DEFLATE blocks and header-parser limit failures use the normal validation-error path rather than escaping as EOFError, zlib.error or csv.Error. Header inspection restores caller stream position/ownership on these failures. No invalid input is exported.
+
+### Optional raw CSV row budget
+
+Use `--max-input-rows 100000` to reject an input file with more than that many data rows before modeling or export. The budget is per file, including comparison/training/scoring inputs, and applies before filtering or aggregation. The default remains unlimited. Values must be integers from 1 to 10,000,000. Only the budget plus one rows are loaded; oversized inputs fail rather than being silently truncated. This is a row limit, not a byte or field-size limit. Python callers can use `max_rows=`.
