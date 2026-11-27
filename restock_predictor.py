@@ -155,8 +155,11 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None, max_rows=None):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None, max_rows=None, timeline_days=None):
     """Print the forecast and return a structured summary for downstream use."""
+    if timeline_days is not None and (isinstance(timeline_days, bool) or not isinstance(timeline_days, int) or not 1 <= timeline_days <= 3660):
+        print("timeline_days must be an integer from 1 to 3660.")
+        return None
     try:
         threshold = _finite_number(threshold, "Restock threshold")
     except ValueError:
@@ -260,6 +263,14 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
             "available_history_points": int(available_history_points),
         }
 
+        if timeline_days is not None:
+            if abs(latest_day + timeline_days) > MAX_SAFE_DAY:
+                raise ValueError("Timeline target exceeds the exact float64 day range.")
+            days = [latest_day + offset for offset in range(1, timeline_days + 1)]
+            stocks = model.predict(pd.DataFrame({"day": [day - origin_day for day in days]})) * stock_scale
+            if not np.isfinite(stocks).all():
+                raise ValueError("Timeline stock predictions must be finite.")
+            summary["timeline"] = [{"target_day": day, "predicted_stock": max(0.0, float(stock)), "status": classify_stock_status(max(0.0, float(stock)), threshold)} for day, stock in zip(days, stocks)]
         if lead_time_days is not None:
             summary["lead_time_days"] = lead_time_days
             summary["reorder_before_delivery"] = days_to_threshold is not None and days_to_threshold <= lead_time_days
@@ -339,6 +350,7 @@ def main(argv=None):
     parser.add_argument("--output", help="Atomically save the structured forecast as JSON, distinct from the input")
     parser.add_argument("--lead-time-days", type=int, help="Compare projected threshold runway with a supplier lead time; no order is placed")
     parser.add_argument("--max-input-rows", type=int, help="Reject CSV files exceeding this raw row budget (1..10000000)")
+    parser.add_argument("--timeline-days", type=int, help="Include 1..3660 daily forecasts from the same fitted trend")
     args = parser.parse_args(argv)
     if args.max_input_rows is not None and not 1 <= args.max_input_rows <= 10_000_000:
         parser.error("--max-input-rows must be from 1 to 10000000")
@@ -352,6 +364,8 @@ def main(argv=None):
         options["lead_time_days"] = args.lead_time_days
     if args.lookback_points is not None:
         options["lookback_points"] = args.lookback_points
+    if args.timeline_days is not None:
+        options["timeline_days"] = args.timeline_days
     if args.max_input_rows is not None:
         options["max_rows"] = args.max_input_rows
     if delimiter != ",":
