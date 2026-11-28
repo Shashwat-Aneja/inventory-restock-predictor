@@ -20,7 +20,9 @@ RESTOCK_THRESHOLD = 500  # Minimum safe stock level
 MAX_SAFE_DAY = 2**53 - 1  # Largest integer exactly represented by float64
 
 
-def _read_csv_input(csv_file, delimiter=",", max_rows=None, **options):
+def _read_csv_input(csv_file, delimiter=",", max_rows=None, encoding="utf-8", **options):
+    if encoding not in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
+        raise ValueError("Unsupported input encoding.")
     if max_rows is not None and (isinstance(max_rows, bool) or not isinstance(max_rows, int) or not 1 <= max_rows <= 10_000_000):
         raise ValueError("max_rows must be an integer from 1 to 10000000.")
     if delimiter not in (",", ";", "\t", "|"):
@@ -29,9 +31,9 @@ def _read_csv_input(csv_file, delimiter=",", max_rows=None, **options):
         if "nrows" in options:
             raise ValueError("Do not combine nrows and max_rows.")
         options["nrows"] = max_rows + 1
-    _reject_duplicate_headers(csv_file, delimiter)
+    _reject_duplicate_headers(csv_file, delimiter, encoding=encoding)
     try:
-        frame = pd.read_csv(csv_file, **options, **({"sep": delimiter} if delimiter != "," else {}))
+        frame = pd.read_csv(csv_file, **({"encoding": encoding} if encoding != "utf-8" else {}), **options, **({"sep": delimiter} if delimiter != "," else {}))
     except (EOFError, lzma.LZMAError, zlib.error, csv.Error) as exc:
         raise ValueError("CSV input is corrupt or incomplete, or its header exceeds parser limits.") from exc
     if max_rows is not None and len(frame) > max_rows:
@@ -39,7 +41,7 @@ def _read_csv_input(csv_file, delimiter=",", max_rows=None, **options):
     return frame
 
 
-def _reject_duplicate_headers(csv_file, delimiter=","):
+def _reject_duplicate_headers(csv_file, delimiter=",", encoding="utf-8"):
     """Inspect original UTF-8 CSV headers without taking ownership of streams."""
     def header_lines(source):
         # csv.reader needs physical lines even for StringIO objects whose default
@@ -81,7 +83,7 @@ def _reject_duplicate_headers(csv_file, delimiter=","):
             return
         opener = {".gz": gzip.open, ".bz2": bz2.open, ".xz": lzma.open}.get(Path(csv_file).suffix, open)
         try:
-            with opener(csv_file, mode="rt", encoding="utf-8-sig", newline="") as source:
+            with opener(csv_file, mode="rt", encoding=encoding, newline="") as source:
                 headers = next(csv.reader(header_lines(source), delimiter=delimiter), [])
         except (EOFError, lzma.LZMAError, zlib.error, csv.Error) as exc:
             raise ValueError("CSV input is corrupt or incomplete, or its header exceeds parser limits.") from exc
@@ -90,7 +92,7 @@ def _reject_duplicate_headers(csv_file, delimiter=","):
             raise ValueError("CSV streams must be seekable for header validation.")
         position = csv_file.tell()
         binary = isinstance(csv_file.read(0), bytes)
-        source = io.TextIOWrapper(csv_file, encoding="utf-8-sig", newline="") if binary else csv_file
+        source = io.TextIOWrapper(csv_file, encoding=encoding, newline="") if binary else csv_file
         try:
             headers = next(csv.reader(header_lines(source), delimiter=delimiter), [])
         except (EOFError, lzma.LZMAError, zlib.error, csv.Error) as exc:
@@ -155,7 +157,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None, max_rows=None, timeline_days=None, duplicate_days="mean"):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None, max_rows=None, timeline_days=None, duplicate_days="mean", encoding="utf-8"):
     """Print the forecast and return a structured summary for downstream use."""
     if duplicate_days not in ("mean", "last", "error"):
         print("duplicate_days must be mean, last, or error.")
@@ -182,7 +184,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         print("Lead time must be a non-negative whole number within the supported day range.")
         return None
     try:
-        df = _read_csv_input(csv_file, delimiter, **({"max_rows": max_rows} if max_rows is not None else {}))
+        df = _read_csv_input(csv_file, delimiter, **({"encoding": encoding} if encoding != "utf-8" else {}), **({"max_rows": max_rows} if max_rows is not None else {}))
 
         required_columns = {"day", "stock_left"}
         if not required_columns.issubset(df.columns):
@@ -362,6 +364,7 @@ def main(argv=None):
     parser.add_argument("--max-input-rows", type=int, help="Reject CSV files exceeding this raw row budget (1..10000000)")
     parser.add_argument("--timeline-days", type=int, help="Include 1..3660 daily forecasts from the same fitted trend")
     parser.add_argument("--duplicate-days", choices=("mean", "last", "error"), default="mean", help="Repeated day handling; last means last source row")
+    parser.add_argument("--encoding", choices=("utf-8", "utf-8-sig", "cp1252", "latin-1"), default="utf-8", help="Input CSV text encoding; output encoding remains UTF-8")
     args = parser.parse_args(argv)
     if args.max_input_rows is not None and not 1 <= args.max_input_rows <= 10_000_000:
         parser.error("--max-input-rows must be from 1 to 10000000")
@@ -379,6 +382,8 @@ def main(argv=None):
         options["duplicate_days"] = args.duplicate_days
     if args.timeline_days is not None:
         options["timeline_days"] = args.timeline_days
+    if args.encoding != "utf-8":
+        options["encoding"] = args.encoding
     if args.max_input_rows is not None:
         options["max_rows"] = args.max_input_rows
     if delimiter != ",":
