@@ -126,3 +126,9 @@ Use `--max-input-rows 100000` to reject an input file with more than that many d
 `--timeline-days 14` includes daily stock forecasts and risk statuses from one fitted trend (1..3660 days). Negative predictions clamp to zero. The main `--days-ahead` point forecast remains independent; timeline output is in the returned/JSON summary.
 
 `--duplicate-days mean|last|error` controls repeated-day inventory observations. Default mean preserves equal day weighting; last uses the final source row per day before sorting; error rejects duplicates before fitting. Nondefault policy is recorded in JSON.
+
+`--encoding utf-8|utf-8-sig|cp1252|latin-1` explicitly selects CSV input decoding, including compressed files and binary streams. Header validation and data parsing use the same encoding; comparison/training/scoring inputs share it. The default remains UTF-8, and export encoding is unchanged. Text streams are already decoded by their caller.
+
+`--max-input-bytes N` snapshots each decompressed CSV input into a bounded byte buffer before parsing (1..64 MiB). Oversized input fails; gzip/bzip2/xz limits apply after decompression. Caller-owned seekable streams retain position and ownership. Text stream bytes use the selected encoding. This optional mode requires local regular files or seekable streams and composes with the raw row budget.
+
+`--expect-input-sha256 HEX` requires the main CSV input to match a SHA-256 digest of its decompressed bytes, including any BOM, before header/data parsing. The verified byte snapshot is what gets parsed. It uses the explicit byte budget or a 64 MiB cap by default. For text streams, bytes use the selected encoding. This flag applies to the main/training file; comparison and separate scoring files are not implicitly required to have the same digest. Python readers accept `expected_sha256=` independently per file.
