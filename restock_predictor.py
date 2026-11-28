@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import zlib
 import gzip
 import bz2
@@ -71,7 +73,7 @@ def _snapshot_csv_input(csv_file, max_bytes, encoding):
     return io.BytesIO(raw)
 
 
-def _read_csv_input(csv_file, delimiter=",", max_rows=None, encoding="utf-8", max_bytes=None, **options):
+def _read_csv_input(csv_file, delimiter=",", max_rows=None, encoding="utf-8", max_bytes=None, expected_sha256=None, **options):
     if encoding not in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
         raise ValueError("Unsupported input encoding.")
     if max_rows is not None and (isinstance(max_rows, bool) or not isinstance(max_rows, int) or not 1 <= max_rows <= 10_000_000):
@@ -82,7 +84,14 @@ def _read_csv_input(csv_file, delimiter=",", max_rows=None, encoding="utf-8", ma
         if "nrows" in options:
             raise ValueError("Do not combine nrows and max_rows.")
         options["nrows"] = max_rows + 1
-    if max_bytes is not None:
+    if expected_sha256 is not None:
+        if not isinstance(expected_sha256, str) or len(expected_sha256) != 64 or any(c not in "0123456789abcdefABCDEF" for c in expected_sha256):
+            raise ValueError("expected_sha256 must be a 64-character hexadecimal digest.")
+        csv_file = _snapshot_csv_input(csv_file, max_bytes if max_bytes is not None else 64 * 1024 * 1024, encoding)
+        actual = hashlib.sha256(csv_file.getbuffer()).hexdigest()
+        if not hmac.compare_digest(actual, expected_sha256.lower()):
+            raise ValueError("CSV input SHA-256 does not match the expected digest.")
+    elif max_bytes is not None:
         csv_file = _snapshot_csv_input(csv_file, max_bytes, encoding)
     _reject_duplicate_headers(csv_file, delimiter, encoding=encoding)
     try:
@@ -210,7 +219,7 @@ def estimate_days_until_threshold(current_stock, daily_change, threshold):
     return int(math.ceil(raw_days))
 
 
-def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None, max_rows=None, timeline_days=None, duplicate_days="mean", encoding="utf-8", max_bytes=None):
+def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_output=False, delimiter=",", lookback_points=None, lead_time_days=None, max_rows=None, timeline_days=None, duplicate_days="mean", encoding="utf-8", max_bytes=None, expected_sha256=None):
     """Print the forecast and return a structured summary for downstream use."""
     if duplicate_days not in ("mean", "last", "error"):
         print("duplicate_days must be mean, last, or error.")
@@ -237,7 +246,7 @@ def predict_restock(csv_file, threshold=RESTOCK_THRESHOLD, days_ahead=1, json_ou
         print("Lead time must be a non-negative whole number within the supported day range.")
         return None
     try:
-        df = _read_csv_input(csv_file, delimiter, **({"max_bytes": max_bytes} if max_bytes is not None else {}), **({"encoding": encoding} if encoding != "utf-8" else {}), **({"max_rows": max_rows} if max_rows is not None else {}))
+        df = _read_csv_input(csv_file, delimiter, **({"expected_sha256": expected_sha256} if expected_sha256 is not None else {}), **({"max_bytes": max_bytes} if max_bytes is not None else {}), **({"encoding": encoding} if encoding != "utf-8" else {}), **({"max_rows": max_rows} if max_rows is not None else {}))
 
         required_columns = {"day", "stock_left"}
         if not required_columns.issubset(df.columns):
@@ -419,6 +428,7 @@ def main(argv=None):
     parser.add_argument("--duplicate-days", choices=("mean", "last", "error"), default="mean", help="Repeated day handling; last means last source row")
     parser.add_argument("--encoding", choices=("utf-8", "utf-8-sig", "cp1252", "latin-1"), default="utf-8", help="Input CSV text encoding; output encoding remains UTF-8")
     parser.add_argument("--max-input-bytes", type=int, help="Snapshot and bound each decompressed CSV input (1..67108864 bytes)")
+    parser.add_argument("--expect-input-sha256", help="Require the main CSV input to match this SHA-256 of decompressed bytes")
     args = parser.parse_args(argv)
     if args.max_input_bytes is not None and not 1 <= args.max_input_bytes <= 64 * 1024 * 1024:
         parser.error("--max-input-bytes must be from 1 to 67108864")
@@ -442,6 +452,8 @@ def main(argv=None):
         options["encoding"] = args.encoding
     if args.max_input_bytes is not None:
         options["max_bytes"] = args.max_input_bytes
+    if args.expect_input_sha256 is not None:
+        options["expected_sha256"] = args.expect_input_sha256
     if args.max_input_rows is not None:
         options["max_rows"] = args.max_input_rows
     if delimiter != ",":
